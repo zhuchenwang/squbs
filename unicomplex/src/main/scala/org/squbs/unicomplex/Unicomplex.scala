@@ -28,7 +28,7 @@ case object Ack
  * It starts actors that are part of the Unicomplex.
  */
 class Unicomplex extends Actor with ActorLogging {
-  
+
   override val supervisorStrategy =
     OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 1 minute) {
       case e: Exception => 
@@ -47,6 +47,7 @@ class Unicomplex extends Actor with ActorLogging {
 }
 
 class CubeSupervisor extends Actor with ActorLogging {
+
   override val supervisorStrategy =
     OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 1 minute) {
       case e: Exception => 

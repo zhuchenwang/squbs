@@ -17,12 +17,14 @@ case class Unregister(key: String)
 
 object ServiceRegistry {
 
+  // Context for Agent registration
   implicit val executionContext = actorSystem.dispatcher
 
   private[unicomplex] val route = Agent[Route](null)
   private[unicomplex] val registrar = Agent[ActorRef](null)
   private[unicomplex] val serviceActorContext = Agent[ActorContext](null)
-  
+
+
   /**
    * The Registrar receives Register and Unregister messages.
    */

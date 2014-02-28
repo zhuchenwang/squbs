@@ -520,6 +520,7 @@ trait Future[+T] {
   *  Note: using this method yields nondeterministic dataflow programs.
   */
 object Future {
+  import scala.language.higherKinds
 
   private[threadless] val toBoxed = Map[Class[_], Class[_]](
     classOf[Boolean] -> classOf[java.lang.Boolean],

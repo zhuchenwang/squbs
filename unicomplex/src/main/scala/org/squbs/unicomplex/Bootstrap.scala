@@ -203,6 +203,7 @@ object Bootstrap extends App {
 
   def startRoutes(initInfo: InitInfo) = {
     import initInfo.{jarPath, symName, version, entries}
+
     def startRoute(routeConfig: Config): (String, String, Class[_]) =
       try {
         import ServiceRegistry.registrar

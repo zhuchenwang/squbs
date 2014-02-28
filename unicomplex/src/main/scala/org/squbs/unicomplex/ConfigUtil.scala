@@ -8,65 +8,30 @@
 package org.squbs.unicomplex
 
 import scala.collection.JavaConversions._
-import com.typesafe.config.{ConfigException, Config}
+import scala.util.Try
+import com.typesafe.config.Config
+
 
 object ConfigUtil {
 
   implicit class RichConfig(val underlying: Config) extends AnyVal {
 
-    def getOptionalString(path: String): Option[String] = {
-      try {
-        Option(underlying.getString(path))
-      } catch {
-        case e: ConfigException.Missing => None
-      }
-    }
+    def getOptionalInt(path: String): Option[Int] =
+      Try(underlying.getInt(path)) toOption
 
-    def getOptionalStringList(path: String): Option[Seq[String]] = {
-      val list =
-        try {
-          Some(underlying.getStringList(path))
-        } catch {
-          case e: ConfigException.Missing => None
-        }
-      list map (_.toSeq)
-    }
+    def getOptionalBoolean(path: String): Option[Boolean] =
+      Try(underlying.getBoolean(path)) toOption
 
+    def getOptionalString(path: String): Option[String] =
+      Try(underlying.getString(path)) toOption
 
-    def getOptionalInt(path: String): Option[Int] = {
-      try {
-        Option(underlying.getInt(path))
-      } catch {
-        case e: ConfigException.Missing => None
-      }
-    }
+    def getOptionalConfig(path: String): Option[Config] =
+      Try(underlying.getConfig(path)) toOption
 
-    def getOptionalBoolean(path: String): Option[Boolean] = {
-      try {
-        Option(underlying.getBoolean(path))
-      } catch {
-        case e: ConfigException.Missing => None
-      }
-    }
+    def getOptionalStringList(path: String): Option[Seq[String]] =
+      Try(underlying.getStringList(path).toSeq) toOption
 
-    def getOptionalConfig(path: String): Option[Config] = {
-      try {
-        Some(underlying.getConfig(path))
-      } catch {
-        case e: ConfigException.Missing => None
-      }
-    }
-
-
-    def getOptionalConfigList(path: String): Option[Seq[Config]] = {
-      val list =
-        try {
-          Some(underlying.getConfigList(path))
-        } catch {
-          case e: ConfigException.Missing => None
-        }
-      list map (_.toSeq)
-    }
+    def getOptionalConfigList(path: String): Option[Seq[Config]] =
+      Try(underlying.getConfigList(path).toSeq) toOption
   }
-
 }
