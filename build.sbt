@@ -1,6 +1,6 @@
 scalaVersion := "2.10.3"
 
-version in ThisBuild := "0.0.8"
+version in ThisBuild := "0.1.0"
 
 publishArtifact := false
 
