@@ -24,3 +24,7 @@ findbugsSettings
 org.scalastyle.sbt.ScalastylePlugin.Settings
 
 parallelExecution in Test := false
+
+ScoverageSbtPlugin.instrumentSettings
+
+parallelExecution in ScoverageSbtPlugin.scoverageTest := false
