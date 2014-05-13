@@ -459,34 +459,6 @@ class UnicomplexSpec extends TestKit(Unicomplex.actorSystem) with ImplicitSender
       assert(Source.fromURL(s"http://127.0.0.1:$port/pingpongsvc/pong").mkString equals "Ping")
     }
 
-    "not mess up if stop all cubes simultaneously" in {
-      val w = new Waiter
-
-      Future.sequence(Seq(
-        Unicomplex() ? StopCube("org.squbs.unicomplex.test.DummySvc"),
-        Unicomplex() ? StopCube("org.squbs.unicomplex.test.DummyCube"),
-        Unicomplex() ? StopCube("org.squbs.unicomplex.test.DummyCubeSvc")
-      )).onComplete(result => {
-        w {
-          assert(result.isSuccess)
-          assert(result.get.forall(_ == Ack))
-        }
-        w.dismiss()
-      })
-
-      intercept[FileNotFoundException]{
-        Source.fromURL(s"http://127.0.0.1:$port/dummysvc/msg/hello").mkString
-      }
-
-      intercept[FileNotFoundException]{
-        Source.fromURL(s"http://127.0.0.1:$port/pingpongsvc/ping").mkString
-      }
-
-      intercept[FileNotFoundException]{
-        Source.fromURL(s"http://127.0.0.1:$port/pingpongsvc/pong").mkString
-      }
-    }
-
     "not mess up if start all cubes simultaneously" in {
       val w = new Waiter
 
