@@ -23,3 +23,5 @@ lazy val `squbs-httpclient` = project dependsOn (`squbs-unicomplex`, `squbs-test
 lazy val `squbs-testkit` = project dependsOn `squbs-unicomplex`
 
 lazy val `squbs-pattern` = project
+
+lazy val `squbs-pipeline` = project
