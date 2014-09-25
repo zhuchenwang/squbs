@@ -13,7 +13,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka"         %% "akka-testkit"                 % akkaV % "test",
   "io.spray"                  %% "spray-client"                 % sprayV,
   "io.spray"                  %% "spray-http"                   % sprayV,
-  "org.scalatest"             %% "scalatest"                    % "2.1.0" % "test->*"
+  "org.scalatest"             %% "scalatest"                    % "2.2.1" % "test->*"
 )
 
 findbugsSettings
