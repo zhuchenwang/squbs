@@ -2,7 +2,7 @@ import de.johoop.findbugs4sbt.FindBugs._
 
 name := "squbs-pipeline"
 
-val akkaV = "2.3.2"
+val akkaV = "2.3.5"
 
 val sprayV = "1.3.1"
 
