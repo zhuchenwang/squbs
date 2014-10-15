@@ -32,13 +32,18 @@ import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{Future, Await}
-import scala.util.{Try, Success, Failure}
+import scala.util.Try
 
 import org.slf4j.LoggerFactory
 import org.squbs.lifecycle.ExtensionLifecycle
 
 import ConfigUtil._
-import UnicomplexBoot.Cube
+import scala.Option
+import scala.Predef._
+import org.squbs.unicomplex.UnicomplexBoot.Cube
+import scala.util.Failure
+import scala.Some
+import scala.util.Success
 
 
 object UnicomplexBoot {
@@ -270,37 +275,55 @@ object UnicomplexBoot {
       }
     }
 
-    def startServiceRoute(clazz: Class[_], webContext: String, listeners: Seq[String]) = {
+    def startServiceRoute(clazz: Class[_], proxyClazz: Option[Class[_]], webContext: String, listeners: Seq[String]) = {
       try {
         val routeClass = clazz asSubclass classOf[RouteDefinition]
         val props = Props(classOf[RouteActor], webContext, routeClass)
         val className = clazz.getSimpleName
         val actorName = if (webContext.length > 0) s"$webContext-$className-route" else s"root-$className-route"
-        cubeSupervisor ! StartCubeService(webContext, listeners, props, actorName, initRequired = true)
+        cubeSupervisor ! StartCubeService(webContext, listeners, props, proxyClazz, actorName, initRequired = true)
         Some((symName, alias, version, clazz))
       } catch {
         case e: ClassCastException => None
       }
     }
 
-    def startServiceActor(clazz: Class[_], webContext: String, listeners: Seq[String],
+    def startServiceActor(clazz: Class[_], proxyClazz: Option[Class[_]], webContext: String, listeners: Seq[String],
                           initRequired: Boolean) = {
       try {
         val actorClass = clazz asSubclass classOf[Actor]
-        val props = Props { WebContext.createWithContext(webContext){ actorClass.newInstance() } }
+        val props = Props {
+          WebContext.createWithContext(webContext) {
+            actorClass.newInstance()
+          }
+        }
         val className = clazz.getSimpleName
         val actorName = if (webContext.length > 0) s"$webContext-$className-handler" else s"root-$className-handler"
-        cubeSupervisor ! StartCubeService(webContext, listeners, props, actorName, initRequired)
+        cubeSupervisor ! StartCubeService(webContext, listeners, props, proxyClazz, actorName, initRequired)
         Some((symName, alias, version, actorClass))
       } catch {
         case e: ClassCastException => None
       }
     }
 
+    def getProxyClass(serviceConfig: Config): Option[Class[_]] = {
+      Try {
+        serviceConfig.getString("proxy-class-name")
+      } match {
+        case Success(className) =>
+          val clz = Class.forName(className, true, getClass.getClassLoader)
+          clz asSubclass classOf[ServiceProxy[Any]]
+          Some(clz)
+        case Failure(t) => None // not defined
+      }
+    }
+
+
     def startService(serviceConfig: Config): Option[(String, String, String, Class[_])] =
     try {
       val className = serviceConfig.getString("class-name")
       val clazz = Class.forName(serviceConfig.getString("class-name"), true, getClass.getClassLoader)
+      val proxyClazz = getProxyClass(serviceConfig)
 
       val webContext = serviceConfig.getString("web-context")
 
@@ -321,8 +344,8 @@ object UnicomplexBoot {
         else listenerMapping collect { case (entry, Some(listener)) => listener }
       })
 
-      val service = startServiceRoute(clazz, webContext, listeners) orElse startServiceActor(
-        clazz, webContext, listeners, serviceConfig getOptionalBoolean "init-required" getOrElse false)
+      val service = startServiceRoute(clazz, proxyClazz, webContext, listeners) orElse startServiceActor(
+        clazz, proxyClazz, webContext, listeners, serviceConfig getOptionalBoolean "init-required" getOrElse false)
 
       if (service == None) throw new ClassCastException(s"Class $className is neither a RouteDefinition nor an Actor.")
       service
