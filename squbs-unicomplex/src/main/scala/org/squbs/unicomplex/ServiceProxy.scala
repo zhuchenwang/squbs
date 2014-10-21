@@ -153,15 +153,15 @@ abstract class ServiceProxy[T](hostActorProps: Props) extends Actor with ActorLo
     def receive: Actor.Receive = {
 
       case resp: HttpResponse =>
-        processResponse(resp, r => r)
+        processResponse(resp)
         context.stop(self)
 
       case Confirmed(ChunkedResponseStart(resp), ack) =>
-        processResponse(resp, r => Confirmed(ChunkedResponseStart(r), ack))
+        processChunkedResponseStart(ChunkedResponseStart(resp), r => Confirmed(r, ack))
 
       // need it?
-      case ChunkedResponseStart(resp) =>
-        processResponse(resp, r => ChunkedResponseStart(r))
+      case crs: ChunkedResponseStart =>
+        processChunkedResponseStart(crs, r => r)
 
       //TODO what if process ChunkedResponseStart failed?
       case chunk: MessageChunk =>
@@ -177,12 +177,24 @@ abstract class ServiceProxy[T](hostActorProps: Props) extends Actor with ActorLo
     }
 
 
-    def processResponse(resp: HttpResponse, converter: HttpResponse => Any): Unit = {
+    def processChunkedResponseStart(crs: ChunkedResponseStart, converter: ChunkedResponseStart => Any): Unit = {
+      Try {
+        handleChunkedResponseStart(crs, reqCtx)
+      } match {
+        case Success(chunkedResponseStart) =>
+          client forward converter(chunkedResponseStart)
+        case Failure(t) =>
+          log.error(t, "Failed to handle response in ResponseAgent")
+          client ! HttpResponse(InternalServerError, "Error in processing response.")
+      }
+    }
+
+    def processResponse(resp: HttpResponse): Unit = {
       Try {
         handleResponse(resp, reqCtx)
       } match {
         case Success(response) =>
-          client forward converter(response)
+          client forward response
         case Failure(t) =>
           log.error(t, "Failed to handle response in ResponseAgent")
           client ! HttpResponse(InternalServerError, "Error in processing response.")
@@ -205,6 +217,8 @@ trait HttpLifecycle[T] {
   def handleRequest(req: HttpRequest): (HttpRequest, Option[T])
 
   def handleResponse(resp: HttpResponse, reqCtx: Option[T]): HttpResponse
+
+  def handleChunkedResponseStart(crs: ChunkedResponseStart, reqCtx: Option[T]): ChunkedResponseStart
 
   def handleChunkResponseEnd(reqCtx: Option[T]): Unit
 

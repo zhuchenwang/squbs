@@ -3,8 +3,7 @@ package org.squbs.unicomplex.serviceproxyactor
 import org.squbs.unicomplex.{ServiceProxy, WebContext}
 import akka.actor.{ActorLogging, Actor, Props}
 import spray.http.StatusCodes._
-import spray.http.HttpRequest
-import spray.http.HttpResponse
+import spray.http.{ChunkedResponseStart, HttpRequest, HttpResponse}
 import spray.http.HttpHeaders.RawHeader
 
 /**
@@ -36,6 +35,7 @@ class DummyServiceProxyForActor(hostActorProps: Props) extends ServiceProxy[Stri
     resp.copy(headers = RawHeader("dummyRespHeader", reqCtx.get) :: resp.headers)
   }
 
+  def handleChunkedResponseStart(crs: ChunkedResponseStart, reqCtx: Option[String]): ChunkedResponseStart = ???
 }
 
 

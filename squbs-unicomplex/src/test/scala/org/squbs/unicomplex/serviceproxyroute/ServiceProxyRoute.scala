@@ -2,7 +2,7 @@ package org.squbs.unicomplex.serviceproxyroute
 
 import org.squbs.unicomplex.{ServiceProxy, WebContext, RouteDefinition}
 import spray.routing.Directives._
-import spray.http.{HttpRequest, HttpEntity, HttpResponse}
+import spray.http.{ChunkedResponseStart, HttpRequest, HttpEntity, HttpResponse}
 import spray.http.MediaTypes._
 import akka.actor.Props
 import spray.http.HttpHeaders.RawHeader
@@ -37,6 +37,7 @@ class DummyServiceProxyForRoute(hostActorProps: Props) extends ServiceProxy[Stri
     resp.copy(headers = RawHeader("dummyRespHeader", reqCtx.get) :: resp.headers)
   }
 
+  def handleChunkedResponseStart(crs: ChunkedResponseStart, reqCtx: Option[String]): ChunkedResponseStart = ???
 }
 
 
