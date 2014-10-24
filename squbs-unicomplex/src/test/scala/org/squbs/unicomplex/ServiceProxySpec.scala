@@ -30,6 +30,12 @@ import spray.can.Http
 import spray.http._
 import scala.concurrent.duration._
 import scala.util.Try
+import spray.client.pipelining._
+import spray.http.HttpRequest
+import spray.http.HttpResponse
+import akka.pattern.ask
+import spray.util._
+
 
 object ServiceProxySpec {
 
@@ -79,6 +85,12 @@ with AsyncAssertions {
     Unicomplex(system).uniActor ! GracefulStop
   }
 
+  val interface = "127.0.0.1"
+  //val connect = Http.Connect(interface, port)
+
+  val hostConnector = Http.HostConnectorSetup(interface, port)
+  val Http.HostConnectorInfo(connector, _) = IO(Http).ask(hostConnector).await
+
   "UnicomplexBoot" must {
 
     "start all services" in {
@@ -103,8 +115,43 @@ with AsyncAssertions {
         response.headers.find(h => h.name.equals("dummyRespHeader")).get.value should be("CDC")
       }
 
+      println("Success......")
 
     }
+
+    "chunk request with RegisterChunkHandler" in {
+
+      val actor_jar_path = ServiceProxySpec.getClass.getResource("/classpaths/StreamSvc/akka-actor_2.10-2.3.2.jar1").getPath
+      val actorFile = new java.io.File(actor_jar_path)
+      println("stream file path:" + actor_jar_path)
+      println("Exists:" + actorFile.exists())
+      println("Can Read:" + actorFile.canRead)
+      require(actorFile.exists() && actorFile.canRead)
+      val fileLength = actorFile.length()
+
+      val chunks = HttpData(actorFile).toChunkStream(65000)
+      val parts = chunks.zipWithIndex.flatMap {
+        case (httpData, index) => Seq(BodyPart(HttpEntity(httpData), s"segment-$index"))
+      } toSeq
+
+
+      val multipartFormData = MultipartFormData(parts)
+
+      val response = spray.client.HttpDialog(connector)
+        .send(Post(uri = "/serviceproxyactor/file-upload", content = multipartFormData))
+        .end
+        .await(timeout)
+
+      //println(response.entity.data.length)
+      //println(response)
+
+      response.headers.find(h => h.name.equals("dummyReqHeader")).get.value should be("PayPal")
+      response.headers.find(h => h.name.equals("dummyRespHeader")).get.value should be("CDC")
+
+      response.entity.data.length should be(fileLength)
+
+    }
+
 
   }
 }

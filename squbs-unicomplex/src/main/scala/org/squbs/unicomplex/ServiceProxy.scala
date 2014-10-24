@@ -5,7 +5,10 @@ import spray.http._
 import scala.collection.mutable
 import scala.util.Try
 import spray.http.StatusCodes._
+import scala.concurrent.Future
+import java.util.concurrent.ConcurrentLinkedQueue
 import spray.http.HttpRequest
+import spray.can.Http.RegisterChunkHandler
 import spray.http.Confirmed
 import spray.http.ChunkedRequestStart
 import scala.util.Failure
@@ -13,16 +16,17 @@ import spray.http.ChunkedResponseStart
 import scala.Some
 import spray.http.HttpResponse
 import scala.util.Success
-import akka.actor.Terminated
 
 /**
  * Created by lma on 14-10-11.
  */
 abstract class ServiceProxy[T](hostActorProps: Props) extends Actor with ActorLogging with HttpLifecycle[T] {
 
-  val responderAgents = mutable.Map.empty[ActorRef, ActorRef] // WeakHashMap is reliable?
+  val chunkMessageHandlers = mutable.WeakHashMap.empty[ActorRef, ChunkMessageHandler] // buffer chunked message
 
   val hostActor = context.actorOf(hostActorProps)
+
+  import context.dispatcher
 
   def receive: Actor.Receive = {
 
@@ -31,116 +35,81 @@ abstract class ServiceProxy[T](hostActorProps: Props) extends Actor with ActorLo
       context.parent ! Initialized(report)
 
     case req: HttpRequest =>
-      createActorAgent ! req
+      val responder = sender() // must do it here, trust me!
+      Future {
+        handleRequest(req)
+      } onComplete {
+        case Success(result) =>
+          val responseAgent = context.actorOf(Props(new ResponseAgent(responder, result._2)))
+          hostActor tell(result._1, responseAgent)
+        case Failure(t) =>
+          log.error(t, "Failed to handle request in RequestAgent")
+          val responseAgent = context.actorOf(Props(new ResponseAgent(responder, None)))
+          responseAgent ! HttpResponse(InternalServerError, "Error in processing request.")
+      }
 
     case crs: ChunkedRequestStart =>
-      val agent = createActorAgent
-      agent ! crs
-      responderAgents += sender() -> agent
-      context.watch(sender())
+      val chunkHandler = new ChunkMessageHandler // cheaper than an actor??
+    val responder = sender()
+      chunkMessageHandlers += responder -> chunkHandler
 
+      Future {
+        handleRequest(crs.request)
+      } onComplete {
+        case Success(result) =>
+          val responseAgent = context.actorOf(Props(new ResponseAgent(responder, result._2)))
+          hostActor tell(ChunkedRequestStart(result._1), responseAgent)
+          chunkHandler.ready(responseAgent) // start sending chunks in buffer
+
+        case Failure(t) =>
+          log.error(t, "Failed to handle request in RequestAgent")
+          val responseAgent = context.actorOf(Props(new ResponseAgent(responder, None)))
+          responseAgent ! HttpResponse(InternalServerError, "Error in processing request.")
+      }
+
+    //below will not be called if user go with RegisterChunkHandler
     case chunk: MessageChunk =>
-      responderAgents.get(sender()) match {
-        case Some(agent) => agent ! chunk
+      chunkMessageHandlers.get(sender()) match {
+        case Some(handler) => handler.bufferOrSend(chunk)
         case None => log.warning("No actor agent found. Possibly already timed out.")
       }
 
     case chunkEnd: ChunkedMessageEnd =>
-      responderAgents.get(sender()) match {
-        case Some(agent) =>
-          agent ! chunkEnd
-          responderAgents -= sender()
-          context.unwatch(sender())
+      chunkMessageHandlers.get(sender()) match {
+        case Some(handler) =>
+          handler.bufferOrSend(chunkEnd)
+          chunkMessageHandlers -= sender()
         case None => log.warning("No actor agent found. Possibly already timed out.")
       }
-
-    // just in case that ChunkedMessageEnd is not received
-    case Terminated(responder) =>
-      responderAgents.remove(responder) foreach (context.stop(_)) // most likely already stopped?
-      context.unwatch(responder)
 
     //let underlying actor handle it
     case other => hostActor forward other
 
   }
 
-  private def createActorAgent: ActorRef = {
-    val responder = sender() // must do it here, trust me!
-    val props = Props(new RequestAgent(responder))
-    context.actorOf(props)
+  class ChunkMessageHandler {
+
+    @volatile var responder: ActorRef = null
+
+    val buffer = new ConcurrentLinkedQueue[HttpRequestPart] // make sure thread safe
+
+    def ready(responseAgent: ActorRef) = {
+      responder = responseAgent
+      var msg: HttpRequestPart = buffer.poll()
+      while (msg != null) {
+        hostActor tell(msg, responder)
+        msg = buffer.poll()
+      }
+    }
+
+    def bufferOrSend(chunk: HttpRequestPart) = {
+      if (responder == null) {
+        buffer.offer(chunk)
+      } else {
+        hostActor tell(chunk, responder)
+      }
+    }
   }
-
-
-  private class RequestAgent(client: ActorRef) extends Actor with ActorLogging {
-
-    def receive: Actor.Receive = {
-
-      case req: HttpRequest =>
-        Try {
-          handleRequest(req)
-        } match {
-          case Success(result) =>
-            val responseAgent = context.actorOf(Props(new ResponseAgent(client, result._2)))
-            hostActor tell(result._1, responseAgent)
-          case Failure(t) =>
-            log.error(t, "Failed to handle request in RequestAgent")
-            val responseAgent = context.actorOf(Props(new ResponseAgent(client, None)))
-            responseAgent ! HttpResponse(InternalServerError, "Error in processing request.")
-        }
-        readyToStop
-
-      case crs: ChunkedRequestStart =>
-        Try {
-          handleRequest(crs.request)
-        } match {
-          case Success(result) =>
-            val responseAgent = context.actorOf(Props(new ResponseAgent(client, result._2)))
-            hostActor tell(ChunkedRequestStart(result._1), responseAgent)
-            context.watch(client)
-            context.become(onChunkedRequest(responseAgent) orElse onStop)
-          case Failure(t) =>
-            log.error(t, "Failed to handle request in RequestAgent")
-            val responseAgent = context.actorOf(Props(new ResponseAgent(client, None)))
-            responseAgent ! HttpResponse(InternalServerError, "Error in processing request.")
-            readyToStop
-        }
-
-      //just in case
-      case other =>
-        log.error("Unexpected msg:" + other)
-        context.stop(self)
-
-    }
-
-    private def readyToStop = {
-      context.watch(client)
-      context.become(onStop)
-    }
-
-    private def onChunkedRequest(responseAgent: ActorRef): Actor.Receive = {
-
-      case chunk: MessageChunk =>
-        hostActor tell(chunk, responseAgent)
-
-      case chunkEnd: ChunkedMessageEnd =>
-        hostActor tell(chunkEnd, responseAgent)
-
-    }
-
-    private def onStop: Actor.Receive = {
-      case Terminated(responder) =>
-        context.stop(self)
-        context.unwatch(responder)
-
-      //just in case
-      case other =>
-        log.error("Unexpected msg:" + other)
-        context.stop(self)
-    }
-
-
-  }
-
 
   /**
    * proxy for response
@@ -163,14 +132,10 @@ abstract class ServiceProxy[T](hostActorProps: Props) extends Actor with ActorLo
       case crs: ChunkedResponseStart =>
         processChunkedResponseStart(crs, r => r)
 
-      //TODO what if process ChunkedResponseStart failed?
-      case chunk: MessageChunk =>
-        client forward chunk
-
-      case chunkEnd: ChunkedMessageEnd =>
-        client forward chunkEnd // emit msg first
-        handleChunkResponseEnd(reqCtx)
-        context.stop(self)
+      //intercept
+      case rch@RegisterChunkHandler(handler) =>
+        client ! RegisterChunkHandler(self)
+        context.become(handleChunkRequest(handler), false)
 
       case other =>
         client forward other
@@ -183,10 +148,33 @@ abstract class ServiceProxy[T](hostActorProps: Props) extends Actor with ActorLo
       } match {
         case Success(chunkedResponseStart) =>
           client forward converter(chunkedResponseStart)
+          context.become(handleChunkResponse)
         case Failure(t) =>
           log.error(t, "Failed to handle response in ResponseAgent")
           client ! HttpResponse(InternalServerError, "Error in processing response.")
       }
+    }
+
+    def handleChunkRequest(chunkHandler: ActorRef): Actor.Receive = {
+      case chunk: MessageChunk =>
+        chunkHandler ! chunk
+
+      case chunkEnd: ChunkedMessageEnd =>
+        chunkHandler ! ChunkedMessageEnd
+        chunkMessageHandlers -= sender()
+        context.unbecome
+
+    }
+
+    def handleChunkResponse: Actor.Receive = {
+      //TODO what if process ChunkedResponseStart failed?
+      case chunk: MessageChunk =>
+        client forward chunk
+
+      case chunkEnd: ChunkedMessageEnd =>
+        client forward chunkEnd // emit msg first
+        handleChunkResponseEnd(reqCtx)
+        context.stop(self)
     }
 
     def processResponse(resp: HttpResponse): Unit = {
