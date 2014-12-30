@@ -17,7 +17,6 @@
  */
 package org.squbs.actorregistry
 
-import javax.management.ObjectName
 
 import akka.actor._
 import org.squbs.unicomplex.{JMX, Initialized}
@@ -92,41 +91,16 @@ private[actorregistry] class ActorRegistry extends Actor with Stash {
   }
 
   def processActorLookup(lookupObj: ActorLookup) : Map[ActorRef, List[CubeActorMessageType]]= {
-    lookupObj match {
-      case ActorLookup(None, None, None) =>
-        Map.empty[ActorRef, List[CubeActorMessageType]]
+    (lookupObj.requestClass.map(_.getCanonicalName), lookupObj.responseClass.map(_.getCanonicalName), lookupObj.actorName) match {
+      case (Some(requestClassName), Some("scala.runtime.Nothing$") | None, None) =>
+        registry.toMap.filter(_._2.exists(_.requestClassName == requestClassName))
+      case (_,  Some("scala.runtime.Nothing$")| None , Some(actorName)) =>
+        registry.toMap.filter(_._1.path.name == actorName)
+      case (_, Some(responseClassName), actorName) =>
+        registry.toMap.filter(x=>x._1.path.name == actorName.getOrElse(x._1.path.name))
+        .filter(_._2.exists(_.responseClassName == responseClassName))
       case obj =>
-        var result= registry.toMap
-
-        val resultActorFilter = obj.actorName match {
-          case Some(name) =>
-            result.filter(_._1.path.name == name)
-          case _ =>
-            result
-        }
-
-        val resultRequestFilter = obj.requestClass.map(_.getCanonicalName) match {
-          case Some(name) if name.startsWith("akka.actor.")=>
-            resultActorFilter
-          case Some(name) if (name.endsWith("$")) =>
-            val newName = name.substring(0, name.length - 1)
-            resultActorFilter.filter(_._2.exists(_.requestClassName == newName))
-          case Some(name) =>
-            resultActorFilter.filter(_._2.exists(_.requestClassName == name))
-          case _ =>
-            resultActorFilter
-        }
-
-        val resultResponseFilter = obj.responseClass.map(_.getCanonicalName) match {
-          case Some("scala.runtime.Nothing$") =>
-            resultRequestFilter
-          case Some(name)=>
-            resultRequestFilter.filter(_._2.exists(_.responseClassName == name))
-          case _ =>
-            resultRequestFilter
-        }
-
-        resultResponseFilter
+        Map.empty[ActorRef, List[CubeActorMessageType]]
     }
   }
 }
