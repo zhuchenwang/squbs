@@ -57,6 +57,7 @@ private[actormonitor] class ActorMonitor(_monitorConfig: ActorMonitorConfig) ext
 
   def process(actor: ActorRef) (implicit monitorConfig: ActorMonitorConfig , context: ActorContext) : Unit= {
       context.watch(actor)
+      log.warning("register {}", actor)
       registerBean(actor)
       getDescendant(actor).foreach(process(_))
   }
