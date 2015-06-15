@@ -1,3 +1,20 @@
+/*
+ * Licensed to Typesafe under one or more contributor license agreements.
+ * See the AUTHORS file distributed with this work for
+ * additional information regarding copyright ownership.
+ * This file is licensed to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 package org.squbs.pipeline
 
 import akka.actor._
@@ -6,14 +23,13 @@ import spray.http._
 
 import scala.util.{Failure, Success}
 
-/**
- * Created by jiamzhang on 2015/3/3.
- */
+//TODO use FSM ??
 class PipelineProcessorActor(target: ActorRef, client: ActorRef, processor: Processor) extends Actor with ActorLogging with Stash {
 
   import context.dispatcher
   import processor._
 
+  //common receiver for all cases
   def onPostProcess: Receive = {
     case PostProcess(ctx) => postProcess(ctx)
     case other => client forward other // unknown message
@@ -21,6 +37,7 @@ class PipelineProcessorActor(target: ActorRef, client: ActorRef, processor: Proc
 
   override def receive = onRequest orElse onPostProcess
 
+  //1st state
   def onRequest: Receive = {
     case ctx: RequestContext => inboundForRequest(ctx)
 
@@ -30,24 +47,29 @@ class PipelineProcessorActor(target: ActorRef, client: ActorRef, processor: Proc
     var newCtx = ctx
     try {
       newCtx = preInbound(ctx)
-      if (newCtx.response != ResponseNotReady) {
-        finalOutput(newCtx)
-      } else {
-        inbound(newCtx) onComplete {
-          case Success(result) =>
-            try {
-              val postResult = postInbound(result)
-              context.become(onResponse(postResult) orElse onPostProcess)
-              target ! postResult.payload
-            } catch {
-              case t: Throwable =>
-                log.error(t, "Error in postInbound processing")
-                self ! PostProcess(onRequestError(result, t))
-            }
-          case Failure(t) =>
-            log.error(t, "Error in inbound processing")
-            self ! PostProcess(onRequestError(newCtx, t))
-        }
+      newCtx.response match {
+        case nr: NormalResponse => postProcess(newCtx) //TODO need go thru outbound??
+        case er: ExceptionalResponse => postProcess(newCtx)
+        case _ =>
+          inbound(newCtx) onComplete {
+            case Success(result) =>
+              try {
+                if (result.responseReady) self ! PostProcess(result)
+                else {
+                  val postResult = postInbound(result)
+                  context.become(onResponse(postResult) orElse onPostProcess)
+                  target ! postResult.payload
+                }
+              } catch {
+                case t: Throwable =>
+                  t.printStackTrace()
+                  log.error(t, "Error in postInbound processing")
+                  self ! PostProcess(onRequestError(result, t))
+              }
+            case Failure(t) =>
+              log.error(t, "Error in inbound processing")
+              self ! PostProcess(onRequestError(newCtx, t))
+          }
       }
     } catch {
       case t: Throwable =>
@@ -66,11 +88,10 @@ class PipelineProcessorActor(target: ActorRef, client: ActorRef, processor: Proc
         case Success(result) =>
           self ! msgFunc(result)
         case Failure(t) =>
-          log.error(t, "Error in processing response")
-          self ! PostProcess(onResponseError(newCtx, t))
+          log.error(t, "Error in processing outbound")
+          self ! PostProcess(onResponseError(newCtx, t)) // chunks will be dead letters?
       }
-    }
-    catch {
+    } catch {
       case t: Throwable =>
         log.error(t, "Error in processing response")
         self ! PostProcess(onResponseError(newCtx, t))
@@ -86,10 +107,9 @@ class PipelineProcessorActor(target: ActorRef, client: ActorRef, processor: Proc
       outboundForResponse(reqCtx.copy(response = NormalResponse(resp)), ctx => PostProcess(ctx))
 
     case ReadyToChunk(ctx) =>
-      postProcess(ctx)
+      val newCtx = postProcess(ctx)
       unstashAll()
-      context.become(onChunk(ctx) orElse onPostProcess)
-
+      context.become(onChunk(newCtx) orElse onPostProcess)
 
     case respStart: ChunkedResponseStart =>
       outboundForResponse(reqCtx.copy(response = NormalResponse(respStart)), ctx => ReadyToChunk(ctx))
@@ -109,7 +129,7 @@ class PipelineProcessorActor(target: ActorRef, client: ActorRef, processor: Proc
 
     case Status.Failure(t) =>
       log.error(t, "Receive Status.Failure")
-      outboundForResponse(onResponseError(reqCtx, t), ctx => PostProcess(ctx))
+      outboundForResponse(onResponseError(reqCtx, t), ctx => PostProcess(ctx)) // make sure preOutbound gets invoked to pair with postInbound
 
     case t: Throwable =>
       log.error(t, "Receive Throwable")
@@ -117,7 +137,7 @@ class PipelineProcessorActor(target: ActorRef, client: ActorRef, processor: Proc
 
   }
 
-
+  //usually chunks will not go to postProcess but go to finalOutput directly.
   def onChunk(reqCtx: RequestContext): Receive = {
 
     case chunk: MessageChunk =>
@@ -141,7 +161,7 @@ class PipelineProcessorActor(target: ActorRef, client: ActorRef, processor: Proc
       }
   }
 
-  private def postProcess(ctx: RequestContext) = {
+  private def postProcess(ctx: RequestContext): RequestContext = {
     val newCtx: RequestContext = try {
       postOutbound(ctx)
     } catch {
@@ -150,6 +170,7 @@ class PipelineProcessorActor(target: ActorRef, client: ActorRef, processor: Proc
         onResponseError(ctx, t)
     }
     finalOutput(newCtx)
+    newCtx
   }
 
   private def finalOutput(ctx: RequestContext) = {

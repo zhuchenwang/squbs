@@ -1,3 +1,20 @@
+/*
+ * Licensed to Typesafe under one or more contributor license agreements.
+ * See the AUTHORS file distributed with this work for
+ * additional information regarding copyright ownership.
+ * This file is licensed to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 package org.squbs.pipeline
 
 import akka.actor.{Actor, ActorSystem}
@@ -5,14 +22,32 @@ import akka.testkit.{TestActorRef, TestKit}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import spray.http._
 
-/**
- * Created by jiamzhang on 2015/3/4.
- */
 class RequestContextSpec extends TestKit(ActorSystem("RequestContextSpecSys")) with FlatSpecLike with Matchers with BeforeAndAfterAll {
 
 	override def afterAll {
 		system.shutdown()
 	}
+
+  "RequestContext" should "handle attributes correctly" in {
+    val req = HttpRequest()
+    val ctx = RequestContext(req)
+
+    ctx.attributes.size should be(0)
+
+    val ctx1 = ctx +> ("key1" -> "value1")
+    ctx1.attribute("key1") should be(Some("value1"))
+
+    val ctx2 = ctx1 +> ("key2" -> 1) +> ("key3"-> new Exception("BadMan"))
+    ctx2.attribute("key2") should be(Some(1))
+    ctx2.attribute[Exception]("key3").get.getMessage should be("BadMan")
+    ctx2.attribute("key1") should be(Some("value1"))
+
+    val ctx3 = ctx2 -> ("key1", "key5")
+    ctx3.attributes.size should be(2)
+    ctx3.attribute("key2") should be(Some(1))
+    ctx3.attribute[Exception]("key3").get.getMessage should be("BadMan")
+
+  }
 
 	"RequestContext" should "parse and wrap the request correctly" in {
 		val req = HttpRequest()

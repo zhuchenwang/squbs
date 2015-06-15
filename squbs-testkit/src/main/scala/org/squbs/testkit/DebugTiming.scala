@@ -17,8 +17,9 @@
  */
 package org.squbs.testkit
 
-import scala.concurrent.duration._
 import akka.testkit.TestKitBase
+
+import scala.concurrent.duration._
 
 object DebugTiming {
 

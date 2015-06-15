@@ -15,30 +15,16 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org
+package org.squbs.testkit.japi
 
-import java.io.IOException
-import java.net.ServerSocket
+import akka.actor.ActorSystem
+import akka.testkit.JavaTestKit
+import org.squbs.testkit.DebugTiming
 
-/**
- * copied from twitter util for testing purpose only.
- */
-package object squbs {
+import scala.concurrent.duration.Duration
 
-
-  /**
-   * A generator of random local [[java.net.InetSocketAddress]] objects with
-   * ephemeral ports.
-   */
-  def nextPort(): Int = {
-    val s = new ServerSocket(0)
-    try {
-      s.getLocalPort
-    } catch {
-      case e:Throwable =>
-          throw new Exception("Couldn't find an open port: %s".format(e.getMessage))
-    } finally {
-      s.close()
-    }
-  }
+class DebugTimingTestKit(actorSystem: ActorSystem) extends JavaTestKit(actorSystem) {
+  override def receiveOne(max: Duration): AnyRef =
+    if (DebugTiming.debugMode) super.receiveOne(DebugTiming.debugTimeout)
+    else super.receiveOne(max)
 }

@@ -1,11 +1,13 @@
+<<<<<<< HEAD
 import de.johoop.cpd4sbt.CopyPasteDetector._
 
 cpdSettings
 import Versions._
 
+
 name := "squbs-zkcluster"
 
-//val akkaV = "2.3.9"
+val akkaV = "2.3.10"
 
 libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-actor" % akkaV,
