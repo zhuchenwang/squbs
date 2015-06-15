@@ -1,4 +1,6 @@
-import de.johoop.findbugs4sbt.FindBugs._
+import de.johoop.cpd4sbt.CopyPasteDetector._
+
+cpdSettings
 import Versions._
 
 name := "squbs-testkit"
@@ -10,7 +12,7 @@ libraryDependencies ++= Seq(
   "io.spray" %% "spray-client"  % sprayV % "test"
 )
 
-findbugsSettings
+//findbugsSettings
 
 
 org.scalastyle.sbt.ScalastylePlugin.Settings

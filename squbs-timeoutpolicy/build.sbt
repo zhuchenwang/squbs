@@ -1,4 +1,6 @@
-import de.johoop.findbugs4sbt.FindBugs._
+import de.johoop.cpd4sbt.CopyPasteDetector._
+
+cpdSettings
 import Versions._
 
 name := "squbs-timeoutpolicy"
@@ -10,7 +12,7 @@ libraryDependencies ++= Seq(
   "org.apache.commons"         %  "commons-math3"       % "3.3"   % "test->*"
 )
 
-findbugsSettings
+//findbugsSettings
 
 // findbugsExcludeFilters := Some(scala.xml.XML.loadFile (baseDirectory.value / "findbugsExclude.xml"))
 

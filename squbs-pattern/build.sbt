@@ -1,4 +1,6 @@
-import de.johoop.findbugs4sbt.FindBugs._
+import de.johoop.cpd4sbt.CopyPasteDetector._
+
+cpdSettings
 import Versions._
 import spray.boilerplate.BoilerplatePlugin.Boilerplate
 
@@ -18,7 +20,7 @@ libraryDependencies ++= Seq(
 // however, it is added due to an intelliJ warning
 Boilerplate.settings : Seq[sbt.Def.Setting[_]]
 
-findbugsSettings
+//findbugsSettings
 
 // findbugsExcludeFilters := Some(scala.xml.XML.loadFile (baseDirectory.value / "findbugsExclude.xml"))
 

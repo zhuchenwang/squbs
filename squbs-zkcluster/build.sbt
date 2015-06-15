@@ -1,4 +1,6 @@
-import de.johoop.findbugs4sbt.FindBugs._
+import de.johoop.cpd4sbt.CopyPasteDetector._
+
+cpdSettings
 import Versions._
 
 name := "squbs-zkcluster"
@@ -20,9 +22,9 @@ libraryDependencies ++= Seq(
   "org.mockito" % "mockito-core" % "1.9.5" % "test"
 )
 
-findbugsSettings
+//findbugsSettings
 
-findbugsExcludeFilters := Some(scala.xml.XML.loadFile (baseDirectory.value / "findbugsExclude.xml"))
+//findbugsExcludeFilters := Some(scala.xml.XML.loadFile (baseDirectory.value / "findbugsExclude.xml"))
 
 org.scalastyle.sbt.ScalastylePlugin.Settings
 

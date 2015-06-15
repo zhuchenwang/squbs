@@ -1,4 +1,6 @@
-import de.johoop.findbugs4sbt.FindBugs._
+import de.johoop.cpd4sbt.CopyPasteDetector._
+
+cpdSettings
 import Versions._
 
 name := "squbs-pipeline"
@@ -18,9 +20,9 @@ libraryDependencies ++= Seq(
   "io.spray" %% "spray-json"    % "1.3.0" % "test"
 )
 
-findbugsSettings
+//findbugsSettings
 
-findbugsExcludeFilters := Some(scala.xml.XML.loadFile (baseDirectory.value / "findbugsExclude.xml"))
+//findbugsExcludeFilters := Some(scala.xml.XML.loadFile (baseDirectory.value / "findbugsExclude.xml"))
 
 org.scalastyle.sbt.ScalastylePlugin.Settings
 

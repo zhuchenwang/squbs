@@ -1,5 +1,7 @@
 import org.scalastyle.sbt.ScalastylePlugin._
-import de.johoop.findbugs4sbt.FindBugs._
+import de.johoop.cpd4sbt.CopyPasteDetector._
+
+cpdSettings
 import Versions._
 
 name := "squbs-httpclient"
@@ -15,7 +17,7 @@ libraryDependencies ++= Seq(
   "org.json4s"                %% "json4s-jackson"               % "3.2.9"
 )
 
-findbugsSettings
+//findbugsSettings
 
 org.scalastyle.sbt.ScalastylePlugin.Settings
 
