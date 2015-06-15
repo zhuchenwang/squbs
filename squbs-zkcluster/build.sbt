@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import de.johoop.cpd4sbt.CopyPasteDetector._
 
 cpdSettings
