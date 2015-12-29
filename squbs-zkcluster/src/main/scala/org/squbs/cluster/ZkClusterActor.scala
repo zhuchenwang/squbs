@@ -1,13 +1,16 @@
 package org.squbs.cluster
 
 import akka.actor._
+import akka.pattern._
 import akka.util.ByteString
 import com.typesafe.scalalogging.LazyLogging
 import org.squbs.cluster.JMX._
 
 import java.util
 
+import scala.concurrent.Await
 import scala.util.Try
+import scala.concurrent.duration._
 
 /**
  * Created by zhuwang on 1/26/15.
@@ -53,7 +56,7 @@ class ZkClusterActor extends FSM[ZkClusterState, ZkClusterData] with Stash with 
       zkMembershipMonitor ! updatedEvent
       zkPartitionsManager ! updatedEvent
       whenZkClientUpdated.foreach(_ ! updatedEvent)
-      stay using zkClusterData.copy(partitions = ZkPartitionsManager.loadPartitions())
+      stay using zkClusterData.copy(partitions = getPartitions)
     case Event(ZkMonitorClient, _) =>
       whenZkClientUpdated = whenZkClientUpdated :+ sender()
       stay
@@ -109,7 +112,7 @@ class ZkClusterActor extends FSM[ZkClusterState, ZkClusterData] with Stash with 
   when(ZkClusterUninitialized)(mandatory orElse {
     case Event(ZkLeaderElected(Some(address)), zkClusterData) =>
       log.info("[uninitialized] leader elected:{} and my zk address:{}", address, zkAddress)
-      val partitions = ZkPartitionsManager.loadPartitions()
+      val partitions = getPartitions
       if(address.hostPort == zkAddress.hostPort) {
         val rebalanced = rebalance(partitions, partitions, zkClusterData.members)
         goto(ZkClusterActiveAsLeader) using zkClusterData.copy(leader = Some(address), partitions = rebalanced)
@@ -128,7 +131,7 @@ class ZkClusterActor extends FSM[ZkClusterState, ZkClusterData] with Stash with 
       if(address.hostPort == zkAddress.hostPort) {
         // in case of leader dies before follower get the whole picture of partitions
         // the follower get elected need to read from Zookeeper
-        val partitions = ZkPartitionsManager.loadPartitions()
+        val partitions = getPartitions
         val rebalanced = rebalance(zkClusterData.partitions, partitions, zkClusterData.members)
         goto(ZkClusterActiveAsLeader) using zkClusterData.copy(leader = Some(address), partitions = rebalanced)
       } else
@@ -292,6 +295,12 @@ class ZkClusterActor extends FSM[ZkClusterState, ZkClusterData] with Stash with 
     case ZkClusterUninitialized -> ZkClusterActiveAsLeader =>
       //unstash all messages uninitialized state couldn't handle
       unstashAll
+  }
+
+  private def getPartitions = {
+    implicit val timeout: akka.util.Timeout = 2 seconds
+    val future = (zkPartitionsManager ? ZkGetPartitions).mapTo[Map[ByteString, ZkPartitionData]]
+    Await.result(future, timeout.duration)
   }
   
   private[cluster] def rebalance(current: Map[ByteString, ZkPartitionData],

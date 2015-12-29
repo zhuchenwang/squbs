@@ -36,7 +36,7 @@ abstract class ZkClusterMultiActorSystemTestKit(systemName: String)
     // start the lazy actor
     zkClusterExts foreach { ext => 
       watch(ext._2.zkClusterActor)
-      ext._2.addShutdownListener(actorSystems(ext._1).shutdown)
+      ext._2.addShutdownListener((_) => actorSystems(ext._1).shutdown)
     }
     
     Thread.sleep(timeout.toMillis / 10)
@@ -48,7 +48,7 @@ abstract class ZkClusterMultiActorSystemTestKit(systemName: String)
     println("*********************************** Shutting Down the Cluster ***********************************")
     val exts = zkClusterExts
     val head = exts.head
-    head._2.addShutdownListener(() => head._2.zkClientWithNs.delete.guaranteed.deletingChildrenIfNeeded.forPath(""))
+    head._2.addShutdownListener((zkClient) => zkClient.delete.guaranteed.deletingChildrenIfNeeded.forPath("/"))
     exts.tail.foreach(ext => killSystem(ext._1))
     killSystem(head._1)
     system.shutdown
@@ -69,7 +69,7 @@ abstract class ZkClusterMultiActorSystemTestKit(systemName: String)
   def bringUpSystem(sysName: String): Unit = {
     actorSystems += sysName -> ActorSystem(sysName, akkaRemoteConfig withFallback zkConfig)
     watch(zkClusterExts(sysName).zkClusterActor)
-    zkClusterExts(sysName).addShutdownListener(actorSystems(sysName).shutdown)
+    zkClusterExts(sysName).addShutdownListener((_) => actorSystems(sysName).shutdown)
     println(s"system $sysName is up")
     Thread.sleep(timeout.toMillis / 5)
   }
@@ -146,8 +146,7 @@ object ZkClusterMultiActorSystemTestKit {
   lazy val zkConfig = ConfigFactory.parseString(
     s"""
       |zkCluster {
-      |  connectionString = "phx5qa01c-fb23.stratus.phx.qa.ebay.com:8085,phx5qa01c-596c.stratus.phx.qa.ebay.com:8085,phx5qa01c-e59d.stratus.phx.qa.ebay.com:8085"
-      |  //connectionString = "127.0.0.1:2181"
+      |  connectionString = "squbszk2-8116.phx01.dev.ebayc3.com:8085,squbszk2-9117.phx01.dev.ebayc3.com:8085"
       |  namespace = "zkclustersystest-$now"
       |  segments = 1
       |}
