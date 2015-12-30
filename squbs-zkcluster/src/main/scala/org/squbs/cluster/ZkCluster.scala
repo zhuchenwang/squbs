@@ -87,7 +87,11 @@ case class ZkCluster(zkAddress: Address,
     connectionString = bytesToConnectionString(
       zkClient.getConfig.usingWatcher(new CuratorWatcher {
         override def process(event: WatchedEvent): Unit = {
-          connectionString = bytesToConnectionString(zkClient.getConfig.usingWatcher(this).forEnsemble())
+          val connStr = bytesToConnectionString(zkClient.getConfig.usingWatcher(this).forEnsemble())
+          if (connectionString != connStr) {
+            system.eventStream.publish(ZkConfigChanged(connStr))
+            connectionString = connStr
+          }
         }
       }).forEnsemble()
     )
