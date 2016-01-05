@@ -25,3 +25,6 @@ temp_*.xml
 
 # travis-ci
 local.*
+
+# zookeeper data dir
+**/zookeeper
